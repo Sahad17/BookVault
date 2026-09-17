@@ -1,0 +1,6 @@
+{
+  "name": "BookVault - Library Management System",
+  "description": "A clean, simple, and modern Library Management System demonstrating core Object-Oriented Programming (OOP) concepts in Java and Spring Boot.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -563,22 +563,73 @@ public class AuditLog {
 import com.bookvault.model.AuditLog;
 import com.bookvault.model.User;
 import com.bookvault.repository.AuditLogRepository;
+import com.bookvault.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.Collections;
+import java.util.List;
 
+/**
+ * AuditLogService
+ * 
+ * Centralized business service for recording system actions.
+ * Provides the reusable method: log(user, action, description)
+ */
 @Service
 public class AuditLogService {
-    private final AuditLogRepository auditLogRepository;
 
-    public AuditLogService(AuditLogRepository auditLogRepository) {
+    private static final Logger logger = LoggerFactory.getLogger(AuditLogService.class);
+
+    private final AuditLogRepository auditLogRepository;
+    private final UserRepository userRepository;
+
+    @Autowired
+    public AuditLogService(AuditLogRepository auditLogRepository, UserRepository userRepository) {
         this.auditLogRepository = auditLogRepository;
+        this.userRepository = userRepository;
+    }
+
+    /**
+     * Primary audit logging method reused by existing services (UserService, BookService, BorrowTransactionService).
+     * Uses REQUIRES_NEW transaction propagation to ensure audit trail persistence is isolated
+     * and non-disruptive to the invoking business logic.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public AuditLog log(User user, String action, String description) {
+        if (user == null) {
+            user = userRepository.findById(1L).orElse(null);
+            if (user == null) {
+                logger.error("No actor user available to record audit log.");
+                return null;
+            }
+        }
+
+        try {
+            AuditLog auditLog = new AuditLog(user, action, description);
+            AuditLog saved = auditLogRepository.save(auditLog);
+            logger.info("Audit recorded [Action: {}, User: {} (ID: {}), Desc: '{}']", 
+                    action, user.getName(), user.getId(), description);
+            return saved;
+        } catch (Exception e) {
+            // Guarantee: Audit logging must NEVER break the original business operation
+            logger.error("Non-fatal error creating audit log [{}]: {}", action, e.getMessage(), e);
+            return null;
+        }
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public AuditLog log(User user, String action, String description) {
-        AuditLog auditLog = new AuditLog(user, action, description);
-        return auditLogRepository.save(auditLog);
+    public AuditLog log(Long userId, String action, String description) {
+        User user = (userId != null) ? userRepository.findById(userId).orElse(null) : null;
+        return log(user, action, description);
+    }
+
+    @Transactional(readOnly = true)
+    public List<AuditLog> getAllLogs() {
+        return auditLogRepository.findAllByOrderByTimestampDesc();
     }
 }`
   },
